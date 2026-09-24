@@ -1,0 +1,10 @@
+{
+  "domain": "unicom_mini",
+  "name": "联通小程序话费",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://mina.10010.com",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.0.0"
+}
