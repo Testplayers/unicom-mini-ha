@@ -25,7 +25,8 @@
 | 剩余话费 | `POST https://mina.10010.com/wxapplet/weixinNew/sspbigball` | 小程序首页"大球"数据，字段 `data.feeResource.feePersent` |
 | 剩余通用流量 | 同上 | `data.flowResource.flowPersent` |
 | 剩余语音 | 同上 | `data.voiceResource.voicePersent` |
-| 手机号 / 月租 | `POST .../weixinNew/queryGoodsList` | `data.res[0].mainNumber` / `currentMonFee` |
+| 可用余额 / 本月消费 / 欠费 / 结转话费 | `POST .../weixinNew/sspbalcbroadcast` | `CANUSE_FEE_CUST` / `REAL_FEE_CUST` / `ALLBOWE_FEE` / `CARRY_INFO_ALL_FEE` |
+| 手机号 | `POST .../weixinNew/queryGoodsList` | `data.res[0].mainNumber` |
 | 会话 token | `POST .../weixinNew/getToken` | 每轮刷新时重新获取 |
 
 **鉴权方式（关键）**：这些接口的 `openid` 字段**不是明文**，而是 `RSA-2048( token + openid )` 的 base64 密文（固定 344 字符）：
@@ -52,7 +53,8 @@ RSA 公钥取自小程序 JS 里的 `getRsa().setPublicKey("...")`（2048 位，
 7. **字段名大小写有区别**：`getTicket` 用 `openId`（大写 I），`sspbigball` / `queryGoodsList` 用 `openid`；写错会得到 `9999 首页大球调用异常`。
 8. **报错消息经常变成 `????`**：联通服务端把中文转丢了，只能靠 `code` 判断（`1001` 鉴权失败 / `1002` 未绑定 / `9999` 调用异常）。
 9. **`mxx.client.10010.com` 的明细接口用不了**：它不认小程序发的 `ticket`（返回 `999999` / `用户信息获取为空`），所以流量分项、账单、积分这类明细暂时无解 —— 首页那三项才是小程序真正在用的接口。
-10. **Gitee 上的同源镜像仓库无法匿名 `git clone`**（公开仓库也返回 401），如需引用请用 GitHub 地址。
+10. **`queryGoodsList` 返回的是"推荐商品"，不是你的套餐**：`res[0]` 里 `productName` 形如「单宽带40元/月300M」，`currentMonFee` / `monthFee` 都是**那条推荐**的价格。**不要拿它当"月租"** —— 本项目第一版就踩了这个坑（把 39.0 当成了月租），后来改从 `sspbalcbroadcast` 取真实账务字段。同一个接口里唯一可信的是 `mainNumber`（你本人的号码）。
+11. **Gitee 上的同源镜像仓库无法匿名 `git clone`**（公开仓库也返回 401），如需引用请用 GitHub 地址。
 
 ---
 
@@ -105,10 +107,15 @@ POST https://mina.10010.com/wxapplet/applet/findOpenid
 
 | 实体 ID | 名称 | 说明 |
 |---|---|---|
-| `sensor.lian_tong_sheng_yu_hua_fei` | 剩余话费 | 单位 CNY，属性含手机号 |
+| `sensor.lian_tong_sheng_yu_hua_fei` | 剩余话费 | 首页"大球"的剩余话费，单位 CNY，属性含手机号/信用额度 |
+| `sensor.lian_tong_ke_yong_yu_e` | 可用余额 | 账户可用话费（含结转），单位 CNY |
+| `sensor.lian_tong_ben_yue_xiao_fei` | 本月消费 | 当月实时消费，单位 CNY |
+| `sensor.lian_tong_qian_fei` | 欠费 | 单位 CNY（0 表示没欠费，适合做"欠费提醒"） |
+| `sensor.lian_tong_jie_zhuan_hua_fei` | 结转话费 | 上月结转金额，单位 CNY |
 | `sensor.lian_tong_sheng_yu_tong_yong_liu_liang` | 剩余通用流量 | 单位 GB |
 | `sensor.lian_tong_sheng_yu_yu_yin` | 剩余语音 | 单位 分钟 |
-| `sensor.lian_tong_yue_zu` | 月租 | 单位 CNY |
+
+> 说明：**联通侧没有暴露"套餐月租"字段**（首页只有余量，套餐接口给的是营销推荐商品）。所以本集成不提供"月租"，改为提供真实的账务字段（可用余额/本月消费/欠费/结转）。如果你要的"月租"只是想看每月固定支出，用「本月消费」+「月平均」更准。
 
 ### 第 5 步：卡片示例
 
