@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "添加联通（微信小程序）",
+        "description": "填入微信小程序的 openid（抓包 `POST mina.10010.com/wxapplet/applet/findOpenid` 的响应里的 `openid`）。\n上次错误：{error}",
+        "data": {
+          "openid": "OpenID",
+          "refresh_interval": "刷新间隔（分钟）"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "连接或鉴权失败（详见表单里的“上次错误”）"
+    },
+    "abort": {
+      "already_configured": "该 openid 已经配置过了"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "联通设置",
+        "data": {
+          "refresh_interval": "刷新间隔（分钟）"
+        }
+      }
+    }
+  }
+}
