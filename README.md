@@ -27,6 +27,8 @@
 | 剩余语音 | 同上 | `data.voiceResource.voicePersent` |
 | 可用余额 / 本月消费 / 欠费 / 结转话费 | `POST .../weixinNew/sspbalcbroadcast` | `CANUSE_FEE_CUST` / `REAL_FEE_CUST` / `ALLBOWE_FEE` / `CARRY_INFO_ALL_FEE` |
 | 手机号 | `POST .../weixinNew/queryGoodsList` | `data.res[0].mainNumber` |
+| 流量/语音/短信 **分项明细**、套餐名 | `POST https://mxx.client.10010.com/servicequerybusiness/operationservice/queryOcsPackageFlowLeftContentRevisedInJune` | 需先建立「微厅」会话，见下 |
+| 微厅会话 | `GET https://mxx.client.10010.com/servicebusiness/wx/serviceEntrance?ticket=..&servicecode=YH10005&ticketChannel=XCXYLCXYY` | 响应（302）会 `Set-Cookie`：`microHallUser` / `microHallAccessToken` |
 | 会话 token | `POST .../weixinNew/getToken` | 每轮刷新时重新获取 |
 
 **鉴权方式（关键）**：这些接口的 `openid` 字段**不是明文**，而是 `RSA-2048( token + openid )` 的 base64 密文（固定 344 字符）：
@@ -52,9 +54,12 @@ RSA 公钥取自小程序 JS 里的 `getRsa().setPublicKey("...")`（2048 位，
 6. **请求头要照抄小程序**：`Referer`（指向 `servicewechat.com/<appid>/494/page-frame.html`）、`xweb_xhr`、`User-Agent`、`X-Tingyun`，缺了容易吃 `9999`。
 7. **字段名大小写有区别**：`getTicket` 用 `openId`（大写 I），`sspbigball` / `queryGoodsList` 用 `openid`；写错会得到 `9999 首页大球调用异常`。
 8. **报错消息经常变成 `????`**：联通服务端把中文转丢了，只能靠 `code` 判断（`1001` 鉴权失败 / `1002` 未绑定 / `9999` 调用异常）。
-9. **`mxx.client.10010.com` 的明细接口用不了**：它不认小程序发的 `ticket`（返回 `999999` / `用户信息获取为空`），所以流量分项、账单、积分这类明细暂时无解 —— 首页那三项才是小程序真正在用的接口。
-10. **`queryGoodsList` 返回的是"推荐商品"，不是你的套餐**：`res[0]` 里 `productName` 形如「单宽带40元/月300M」，`currentMonFee` / `monthFee` 都是**那条推荐**的价格。**不要拿它当"月租"** —— 本项目第一版就踩了这个坑（把 39.0 当成了月租），后来改从 `sspbalcbroadcast` 取真实账务字段。同一个接口里唯一可信的是 `mainNumber`（你本人的号码）。
-11. **Gitee 上的同源镜像仓库无法匿名 `git clone`**（公开仓库也返回 401），如需引用请用 GitHub 地址。
+9. **`mxx.client.10010.com` 的明细接口需要先建"微厅会话"**：直接拿小程序的 `ticket` 去调会得到 `999999` / `用户信息获取为空` —— 因为它要的是**微厅 Cookie**。正确姿势是先 `GET /servicebusiness/wx/serviceEntrance?ticket=..&servicecode=YH10005&ticketChannel=XCXYLCXYY`，**这个请求的 302 响应会 `Set-Cookie: microHallUser / microHallAccessToken`**（`Domain=10010.com`、`Secure; HttpOnly`），带上这两个 Cookie 再去调 `queryOcsPackageFlowLeftContentRevisedInJune`，流量/语音/短信的**分项余量**就都出来了（见 `docs/01` 阶段 6）。
+10. **不用装 MITM 证书也能调试微信 H5/小程序接口**：用 Playwright 直接打开上面那个 `serviceEntrance` URL（带微信 UA 即可），Playwright 天生能看到请求/响应/Cookie；纯 urllib + `http.cookiejar` 也行（本集成就是这么拿微厅 Cookie 的，**无需浏览器**）。⚠️ 302 上的 Cookie 要自己跟随重定向逐跳收集。
+11. **MITM 抓包的前提是"根证书被信任"**：如果证书没装/被试掉，微信所有 HTTPS 都会 `Client TLS handshake failed ... does not trust the proxy's certificate`，表现就是"**小程序里什么都打不开**"，而抓包文件是 **0 字节** —— 遇到这种情况先查证书，别怀疑小程序。
+12. **`queryGoodsList` 返回的是"推荐商品"，不是你的套餐**：`res[0]` 里 `productName` 形如「单宽带40元/月300M」，`currentMonFee` / `monthFee` 都是**那条推荐**的价格。**不要拿它当"月租"** —— 本项目第一版就踩了这个坑（把 39.0 当成了月租），后来改从 `sspbalcbroadcast` 取真实账务字段。同一个接口里唯一可信的是 `mainNumber`（你本人的号码）。
+13. **使用率字段是"分段比例条"不是数字**：微厅余量响应里的顶层 `usePercent` 是 `[{"Value":"0"},...]` 这样的列表，`float()` 会失败 → 自己用 `已用/总量` 算（本项目就是这么做的）。
+14. **Gitee 上的同源镜像仓库无法匿名 `git clone`**（公开仓库也返回 401），如需引用请用 GitHub 地址。
 
 ---
 
@@ -103,7 +108,9 @@ POST https://mina.10010.com/wxapplet/applet/findOpenid
 
 添加时会**立刻实调一次接口做校验**：成功才建配置项，失败会在表单里显示具体错误（常见就是没在小程序登录过 → `获取用户绑定信息异常`）。
 
-### 第 4 步：你会得到 4 个实体
+### 第 4 步：你会得到 14 个实体
+
+话费/账务（来自小程序接口）：
 
 | 实体 ID | 名称 | 说明 |
 |---|---|---|
@@ -114,6 +121,18 @@ POST https://mina.10010.com/wxapplet/applet/findOpenid
 | `sensor.lian_tong_jie_zhuan_hua_fei` | 结转话费 | 上月结转金额，单位 CNY |
 | `sensor.lian_tong_sheng_yu_tong_yong_liu_liang` | 剩余通用流量 | 单位 GB |
 | `sensor.lian_tong_sheng_yu_yu_yin` | 剩余语音 | 单位 分钟 |
+
+余量分项（来自微厅接口，属性里有**逐资源包明细**）：
+
+| 实体 ID | 名称 | 说明 |
+|---|---|---|
+| `sensor.lian_tong_tao_can_ming_cheng` | 套餐名称 | 如「流量王2.0-39（广西）」，属性含通用/定向分项 |
+| `sensor.lian_tong_liu_liang_zong_liang` | 流量总量 | GB，属性含已用/剩余/使用率/每个资源包 |
+| `sensor.lian_tong_liu_liang_yi_yong` | 流量已用 | GB，属性 `资源包明细` 逐包列出（如「套内国内流量(50.00G)：已用 43.22/共 50」） |
+| `sensor.lian_tong_liu_liang_shi_yong_lu` | 流量使用率 | %（自己算：已用/总量） |
+| `sensor.lian_tong_yu_yin_zong_liang` | 语音总量 | 分钟，属性含逐包明细 |
+| `sensor.lian_tong_yu_yin_yi_yong` | 语音已用 | 分钟 |
+| `sensor.lian_tong_duan_xin_sheng_yu` | 短信剩余 | 条 |
 
 > 说明：**联通侧没有暴露"套餐月租"字段**（首页只有余量，套餐接口给的是营销推荐商品）。所以本集成不提供"月租"，改为提供真实的账务字段（可用余额/本月消费/欠费/结转）。如果你要的"月租"只是想看每月固定支出，用「本月消费」+「月平均」更准。
 
