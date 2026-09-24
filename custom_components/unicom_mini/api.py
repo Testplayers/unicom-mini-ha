@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from .const import (
+    API_BALANCE_BROADCAST,
     API_GET_TOKEN,
     API_QUERY_GOODS_LIST,
     API_SSPBIGBALL,
@@ -89,21 +90,35 @@ class UnicomMiniAPI:
         if not isinstance(overview, dict):
             raise UnicomMiniError("sspbigball data 结构异常: %s" % str(overview)[:120])
 
-        # 手机号 / 月费（失败不影响主数据）
+        # 手机号（queryGoodsList 的 res[0].mainNumber）
+        # 注意：同一条 res[0] 里也有 currentMonFee / monthFee，但那是「推荐商品」的价格
+        # （productName 形如「单宽带40元/月300M」），不是本机套餐月租，别拿来当月租。
         phone = None
-        month_fee = None
         try:
             goods = await self._post(API_QUERY_GOODS_LIST, {"openid": blob, "channel": "wxmini"})
             if goods.get("code") == "0000":
                 res = (goods.get("data") or {}).get("res") or []
                 if res and isinstance(res[0], dict):
-                    item = res[0]
-                    phone = item.get("mainNumber") or None
-                    fee = item.get("currentMonFee")
-                    if fee is not None:
-                        month_fee = float(fee)
+                    phone = res[0].get("mainNumber") or None
         except (UnicomMiniError, TypeError, ValueError) as err:
             _LOGGER.debug("queryGoodsList 解析失败（忽略）: %s", err)
+
+        # 账务明细（余额播报 sspbalcbroadcast）：可用余额/本月消费/欠费/结转/信用额度
+        acct: dict[str, Any] = {}
+        try:
+            bc = await self._post(API_BALANCE_BROADCAST, {"openid": blob, "channel": "wxmini"})
+            if bc.get("code") == "0000":
+                rows = bc.get("data") or []
+                if rows and isinstance(rows[0], dict):
+                    acct = rows[0]
+        except (UnicomMiniError, TypeError, ValueError) as err:
+            _LOGGER.debug("sspbalcbroadcast 解析失败（忽略）: %s", err)
+
+        def _acct(key: str) -> float | None:
+            try:
+                return float(acct.get(key))
+            except (TypeError, ValueError):
+                return None
 
         fee_res = overview.get("feeResource") or {}
         flow_res = overview.get("flowResource") or {}
@@ -129,6 +144,10 @@ class UnicomMiniAPI:
             "voice_title": voice_res.get("dynamicVoiceTitle") or "剩余语音",
             "voice_warn": str(voice_res.get("isWarn", "0")) == "1",
             "phone": phone,
-            "month_fee": month_fee,
+            "balance_available": _acct("CANUSE_FEE_CUST"),
+            "month_cost": _acct("REAL_FEE_CUST"),
+            "owed": _acct("ALLBOWE_FEE"),
+            "carry_over": _acct("CARRY_INFO_ALL_FEE"),
+            "credit_limit": _acct("CREDIT_VALUE"),
             "raw_overview": overview,
         }
