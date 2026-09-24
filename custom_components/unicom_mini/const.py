@@ -21,6 +21,14 @@ API_QUERY_GOODS_LIST = API_BASE + "queryGoodsList"
 API_BALANCE_BROADCAST = API_BASE + "sspbalcbroadcast"
 API_GET_TICKET = API_BASE + "getTicket"
 
+# ---- 微营业厅（mxx）链路：拿 microHall Cookie 后可查流量/语音/短信分项 ----
+SERVICE_ENTRANCE = "https://mxx.client.10010.com/servicebusiness/wx/serviceEntrance"
+SERVICE_CODE = "YH10005"        # 余量查询页
+SERVICE_CHANNEL = "XCXYLCXYY"   # 与小程序 webview 一致
+API_MXX_FLOW = ("https://mxx.client.10010.com/servicequerybusiness/operationservice/"
+                "queryOcsPackageFlowLeftContentRevisedInJune")
+API_MXX_BALANCE = "https://mxx.client.10010.com/servicequerybusiness/balancenew/accountBalancenew.htm"
+
 # 小程序 JS 里 getRsa().setPublicKey("...") 的固定 2048 位公钥（DER/SPKI，base64）
 # 用途：接口的 openid 字段必须是 RSA_PKCS1v15(明文) 的 base64，
 # 明文 = token + openid（token 来自 getToken，首次为空串）
@@ -43,6 +51,16 @@ HEADERS_JSON = {
     "xweb_xhr": "1",
     "X-Tingyun": "c=M|4Nl_NnGbjwY",
     "Accept": "*/*",
+    "Accept-Language": "zh-CN,zh;q=0.9",
+    "Referer": _REFERER,
+}
+
+# 微厅（mxx）接口用表单提交，且需要小程序 webview 的 UA
+HEADERS_FORM = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": _WX_UA,
+    "xweb_xhr": "1",
+    "Accept": "application/json, text/plain, */*",
     "Accept-Language": "zh-CN,zh;q=0.9",
     "Referer": _REFERER,
 }
