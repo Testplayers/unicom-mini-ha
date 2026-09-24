@@ -18,6 +18,7 @@ API_BASE = "https://mina.10010.com/wxapplet/weixinNew/"
 API_GET_TOKEN = API_BASE + "getToken"
 API_SSPBIGBALL = API_BASE + "sspbigball"
 API_QUERY_GOODS_LIST = API_BASE + "queryGoodsList"
+API_BALANCE_BROADCAST = API_BASE + "sspbalcbroadcast"
 API_GET_TICKET = API_BASE + "getTicket"
 
 # 小程序 JS 里 getRsa().setPublicKey("...") 的固定 2048 位公钥（DER/SPKI，base64）
